@@ -1,4 +1,4 @@
-module github.com/gustapinto/pg-introspect
+module github.com/gustapinto/pg_gen
 
 go 1.24.4
 
