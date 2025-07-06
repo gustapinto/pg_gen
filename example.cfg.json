@@ -1,0 +1,12 @@
+{
+  "dsn": "postgresql://user:passw@localhost:5432/mydb?sslmode=disable",
+  "schemas": {
+    "public": {
+      "gen": {
+        "dest": "gen",
+        "package": "gen",
+        "emit_json_tags": true
+      }
+    }
+  }
+}
