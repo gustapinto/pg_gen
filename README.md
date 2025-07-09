@@ -2,6 +2,8 @@
 
 A golang code generator to introspect and generate `database/sql` code from Postgres databases
 
+Example usage of the generated code can be found [here](https://github.com/gustapinto/pg_gen/tree/main/example).
+
 ## Usage
 
 1. Create a configuration file in your project root. Example:
