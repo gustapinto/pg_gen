@@ -1,8 +1,8 @@
 {
-  "dsn": "postgresql://user:passw@localhost:5432/mydb?sslmode=disable",
+  "dsn": "postgresql://example_db_user:example_db_passw@localhost:5432/example_db?sslmode=disable",
   "schemas": {
     "public": {
-      "gen": {
+      "go": {
         "dest": "gen",
         "package": "gen",
         "emit_json_tags": true

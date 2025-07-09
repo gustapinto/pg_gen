@@ -1,10 +1,11 @@
-module github.com/gustapinto/pg_gen
+module github.com/gustapinto/pg_gen/example
 
-go 1.24.4
+go 1.24.5
 
 require (
-	github.com/iancoleman/strcase v0.3.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.5
+	github.com/jinzhu/copier v0.4.0
 )
 
 require (

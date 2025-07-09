@@ -1,31 +1,24 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"log"
-	"os"
-
-	_ "embed"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func run() error {
-	configPath := flag.String("config", "pg_gen.json", "The config file path")
+	configPath := flag.String("config", "", "The config JSON file path")
 	flag.Parse()
 
-	configContent, err := os.ReadFile(*configPath)
+	config, err := LoadConfigFromFile(*configPath)
 	if err != nil {
 		return err
 	}
 
-	var config Config
-	if err := json.Unmarshal(configContent, &config); err != nil {
+	if err := config.Validate(); err != nil {
 		return err
 	}
 
-	pgGen, err := NewPgCodeGenerator(&config)
+	pgGen, err := NewPgCodeGenerator(config)
 	if err != nil {
 		return err
 	}

@@ -31,6 +31,5 @@ __debug*
 bin/
 .obsidian/
 .idea/
-gen/
 /*.json
 !example.cfg.json

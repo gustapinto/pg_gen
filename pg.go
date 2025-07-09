@@ -13,12 +13,17 @@ import (
 	_ "embed"
 
 	"github.com/iancoleman/strcase"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-//go:embed templates/table.txt
-var _tableTemplate string
+//go:embed templates/go/dao.txt
+var _daoTemplate string
 
-type PgColumn struct {
+//go:embed templates/go/common.txt
+var _commonTemplate string
+
+type pgColumn struct {
 	Name         string `json:"name"`
 	SqlDataType  string `json:"sql_data_type"`
 	GoDataType   string `json:"go_data_type"`
@@ -26,25 +31,25 @@ type PgColumn struct {
 	IsPrimaryKey bool   `json:"is_primary_key"`
 }
 
-func (c *PgColumn) GoName() string {
+func (c *pgColumn) goName() string {
 	return strcase.ToCamel(c.Name)
 }
 
-func (c *PgColumn) JsonTags() string {
+func (c *pgColumn) jsonTags() string {
 	var sb strings.Builder
 	sb.WriteString("`json:\"")
 	sb.WriteString(strcase.ToSnake(c.Name))
-	sb.WriteString(",omitempty\"`")
+	sb.WriteString("\"`")
 
 	return sb.String()
 }
 
-type PgTable struct {
+type pgTable struct {
 	Name    string     `json:"name,omitempty"`
-	Columns []PgColumn `json:"columns,omitempty"`
+	Columns []pgColumn `json:"columns,omitempty"`
 }
 
-func (t *PgTable) GenerateCode(packageName string, emitJsonTags bool) ([]byte, error) {
+func (t *pgTable) generateCode(packageName string, emitJsonTags bool) ([]byte, error) {
 	tableReplacer := strings.NewReplacer(
 		"{goPackageName}", packageName,
 		"{goEntityName}", t.entityName(),
@@ -61,7 +66,7 @@ func (t *PgTable) GenerateCode(packageName string, emitJsonTags bool) ([]byte, e
 		"{sqlInsertPlaceholders}", t.sqlInsertPlaceholders(),
 	)
 
-	tableRawCode := tableReplacer.Replace(_tableTemplate)
+	tableRawCode := tableReplacer.Replace(_daoTemplate)
 	tableFormattedCode, err := format.Source([]byte(tableRawCode))
 	if err != nil {
 		return nil, err
@@ -70,19 +75,19 @@ func (t *PgTable) GenerateCode(packageName string, emitJsonTags bool) ([]byte, e
 	return tableFormattedCode, nil
 }
 
-func (t *PgTable) entityName() string {
+func (t *pgTable) entityName() string {
 	return strcase.ToCamel(t.Name)
 }
 
-func (t *PgTable) FileName() string {
+func (t *pgTable) FileName() string {
 	return strcase.ToSnake(t.Name)
 }
 
-func (t *PgTable) goEntityFields(emitJsonTags bool) string {
+func (t *pgTable) goEntityFields(emitJsonTags bool) string {
 	var sb strings.Builder
 
 	for _, col := range t.Columns {
-		sb.WriteString(col.GoName())
+		sb.WriteString(col.goName())
 		sb.WriteString(" ")
 
 		if col.Nullable && col.GoDataType != "any" {
@@ -92,7 +97,7 @@ func (t *PgTable) goEntityFields(emitJsonTags bool) string {
 		sb.WriteString(col.GoDataType)
 
 		if emitJsonTags {
-			sb.WriteString(col.JsonTags())
+			sb.WriteString(col.jsonTags())
 		}
 
 		sb.WriteString("\n")
@@ -101,7 +106,7 @@ func (t *PgTable) goEntityFields(emitJsonTags bool) string {
 	return sb.String()
 }
 
-func (t *PgTable) sqlPrimaryKey() string {
+func (t *pgTable) sqlPrimaryKey() string {
 	for _, col := range t.Columns {
 		if col.IsPrimaryKey {
 			return col.Name
@@ -111,11 +116,11 @@ func (t *PgTable) sqlPrimaryKey() string {
 	return "id" // assumed default
 }
 
-func (t *PgTable) sqlTableName() string {
+func (t *pgTable) sqlTableName() string {
 	return t.Name
 }
 
-func (t *PgTable) sqlSelectFields() string {
+func (t *pgTable) sqlSelectFields() string {
 	var sb strings.Builder
 
 	colSize := len(t.Columns) - 1
@@ -132,7 +137,7 @@ func (t *PgTable) sqlSelectFields() string {
 	return sb.String()
 }
 
-func (t *PgTable) sqlInsertFields() string {
+func (t *pgTable) sqlInsertFields() string {
 	var sb strings.Builder
 
 	colSize := len(t.Columns) - 1
@@ -149,13 +154,13 @@ func (t *PgTable) sqlInsertFields() string {
 	return sb.String()
 }
 
-func (t *PgTable) goSelectOneScanFields() string {
+func (t *pgTable) goSelectOneScanFields() string {
 	var sb strings.Builder
 
 	colSize := len(t.Columns) - 1
 	for i, col := range t.Columns {
 		sb.WriteString("&result.Data.")
-		sb.WriteString(col.GoName())
+		sb.WriteString(col.goName())
 
 		if i < colSize {
 			sb.WriteString(", ")
@@ -165,13 +170,13 @@ func (t *PgTable) goSelectOneScanFields() string {
 	return sb.String()
 }
 
-func (t *PgTable) goSelectManyScanFields() string {
+func (t *pgTable) goSelectManyScanFields() string {
 	var sb strings.Builder
 
 	colSize := len(t.Columns) - 1
 	for i, col := range t.Columns {
 		sb.WriteString("&entity.")
-		sb.WriteString(col.GoName())
+		sb.WriteString(col.goName())
 
 		if i < colSize {
 			sb.WriteString(", ")
@@ -181,7 +186,7 @@ func (t *PgTable) goSelectManyScanFields() string {
 	return sb.String()
 }
 
-func (t *PgTable) sqlInsertPlaceholders() string {
+func (t *pgTable) sqlInsertPlaceholders() string {
 	var sb strings.Builder
 
 	colSize := len(t.Columns) - 1
@@ -199,7 +204,7 @@ func (t *PgTable) sqlInsertPlaceholders() string {
 	return sb.String()
 }
 
-func (t *PgTable) sqlUpdatePlaceholders() string {
+func (t *pgTable) sqlUpdatePlaceholders() string {
 	var sb strings.Builder
 
 	colSize := len(t.Columns) - 1
@@ -226,13 +231,13 @@ func (t *PgTable) sqlUpdatePlaceholders() string {
 	return sb.String()
 }
 
-func (t *PgTable) goInsertValues() string {
+func (t *pgTable) goInsertValues() string {
 	var sb strings.Builder
 
 	colSize := len(t.Columns) - 1
 	for i, col := range t.Columns {
 		sb.WriteString("values.")
-		sb.WriteString(col.GoName())
+		sb.WriteString(col.goName())
 
 		if i < colSize {
 			sb.WriteString(", ")
@@ -272,9 +277,9 @@ func (pcg *PgCodeGenerator) Generate() error {
 
 		err = pcg.generateCodeForTables(
 			tables,
-			schema.Gen.Dest,
-			schema.Gen.Package,
-			schema.Gen.EmitJsonTags)
+			schema.GO.Dest,
+			schema.GO.Package,
+			schema.GO.EmitJsonTags)
 		if err != nil {
 			return err
 		}
@@ -283,7 +288,7 @@ func (pcg *PgCodeGenerator) Generate() error {
 	return nil
 }
 
-func (pcg *PgCodeGenerator) getPgTables(schema string) ([]PgTable, error) {
+func (pcg *PgCodeGenerator) getPgTables(schema string) ([]pgTable, error) {
 	const query = `
 	SELECT
 		t.tablename AS name,
@@ -326,9 +331,9 @@ func (pcg *PgCodeGenerator) getPgTables(schema string) ([]PgTable, error) {
 	}
 	defer rows.Close()
 
-	var tables []PgTable
+	var tables []pgTable
 	for rows.Next() {
-		var table PgTable
+		var table pgTable
 		var columnsJson []byte
 
 		if err := rows.Scan(&table.Name, &columnsJson); err != nil {
@@ -345,8 +350,25 @@ func (pcg *PgCodeGenerator) getPgTables(schema string) ([]PgTable, error) {
 	return tables, nil
 }
 
+func (pcg *PgCodeGenerator) generateCommonCode(rootDirectory string, packageName string) error {
+	replacer := strings.NewReplacer("{goPackageName}", packageName)
+
+	rawCode := replacer.Replace(_commonTemplate)
+	formattedCode, err := format.Source([]byte(rawCode))
+	if err != nil {
+		return fmt.Errorf("failed to generate commoon code for package [%s], got error [%s]", packageName, err.Error())
+	}
+
+	commonFilepath := fmt.Sprintf("%s/%s.go", rootDirectory, packageName)
+	if err := pcg.writeToFile(commonFilepath, formattedCode); err != nil {
+		return fmt.Errorf("failed to write file [%s], got error [%s]", commonFilepath, err.Error())
+	}
+
+	return nil
+}
+
 func (pcg *PgCodeGenerator) generateCodeForTables(
-	tables []PgTable,
+	tables []pgTable,
 	rootDirectory string,
 	packageName string,
 	emitJsonTags bool,
@@ -357,13 +379,17 @@ func (pcg *PgCodeGenerator) generateCodeForTables(
 		return fmt.Errorf("failed to create root directory [%s], got error [%s]", rootDirectory, err.Error())
 	}
 
+	if err := pcg.generateCommonCode(rootDirectory, packageName); err != nil {
+		return err
+	}
+
 	for _, table := range tables {
-		code, err := table.GenerateCode(packageName, emitJsonTags)
+		code, err := table.generateCode(packageName, emitJsonTags)
 		if err != nil {
 			return fmt.Errorf("failed to generate code for table [%s], got error [%s]", table.Name, err.Error())
 		}
 
-		filepath := fmt.Sprintf("%s/%s.go", rootDirectory, table.FileName())
+		filepath := fmt.Sprintf("%s/%s_dao.go", rootDirectory, table.FileName())
 		if err := pcg.writeToFile(filepath, code); err != nil {
 			return fmt.Errorf("failed to write file [%s], got error [%s]", filepath, err.Error())
 		}

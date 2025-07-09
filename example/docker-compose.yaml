@@ -1,0 +1,11 @@
+services:
+  db:
+    image: "postgres:17-alpine"
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: "example_db_passw"
+      POSTGRES_USER: "example_db_user"
+      POSTGRES_DB: "example_db"
+    volumes:
+      - "./migrations:/docker-entrypoint-initdb.d"
