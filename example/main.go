@@ -1,3 +1,4 @@
+//go:generate go run github.com/gustapinto/pg_gen@v0.2.0 -config=./example.cfg.json
 package main
 
 import (
