@@ -31,6 +31,14 @@ type SelectResult[T any] struct {
 	Rows     []T  `json:"data,omitempty"`
 }
 
+func (sr *SelectResult[T]) First() *T {
+	if len(sr.Rows) == 0 {
+		return nil
+	}
+
+	return &sr.Rows[0]
+}
+
 func NewOrderBy(column, direction string) OrderBy {
 	return OrderBy{
 		Column:    column,

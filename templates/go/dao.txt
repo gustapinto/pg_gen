@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jinzhu/copier"
 )
 
 type {goEntityName} struct {
@@ -149,8 +148,4 @@ func ({goEntityName}DAO) Delete(ctx context.Context, tx *sql.Tx, opts *DeleteOpt
 	}
 
 	return nil
-}
-
-func ({goEntityName}DAO) Copy(from *{goEntityName}, to any) error {
-	return copier.Copy(&to, from)
 }

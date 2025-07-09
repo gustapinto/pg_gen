@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jinzhu/copier"
 )
 
 type Projects struct {
@@ -153,8 +152,4 @@ func (ProjectsDAO) Delete(ctx context.Context, tx *sql.Tx, opts *DeleteOptions) 
 	}
 
 	return nil
-}
-
-func (ProjectsDAO) Copy(from *Projects, to any) error {
-	return copier.Copy(&to, from)
 }
