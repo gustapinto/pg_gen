@@ -5,7 +5,7 @@ A golang code generator to introspect and generate `database/sql` code from Post
 ## Usage
 
 1. Create a configuration file in your project root. Example:
-```json
+```json5
 {
   // The PostgreSQL database connection string
   "dsn": "postgresql://myuser:mypassword@localhost:5432/mydb?sslmode=disable",
