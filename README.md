@@ -15,13 +15,20 @@ Example usage of the generated code can be found [here](https://github.com/gusta
   // The database schemas that will be introspected for code generation
   "schemas": {
     "public": {
+      // If views should be included in code generation (Optional, default=false)
+      "include_views": true,
+      // Tables or views that should be ignored in code generation (Optional, default=null)
+      "ignore": [
+        "locked_table",
+        "super_secret_view"
+      ],
       // Golang code generation specific stuff
       "go": {
         // The destination folder
         "dest": "./gen",
         // The generated code package name
         "package": "gen",
-        // (Optional) If the generated entities must include JSON tags
+        // If the generated entities must include JSON tags (Optional, default=false)
         "emit_json_tags": true
       }
     }

@@ -312,17 +312,20 @@ func (pcg *PgCodeGenerator) Generate() error {
 			return err
 		}
 
-		views, err := pcg.getPgViews(schemaName)
-		if err != nil {
-			return err
-		}
+		if schema.IncludeViews {
+			views, err := pcg.getPgViews(schemaName)
+			if err != nil {
+				return err
+			}
 
-		for _, view := range views {
-			tables = append(tables, view)
+			for _, view := range views {
+				tables = append(tables, view)
+			}
 		}
 
 		err = pcg.generateCodeForTables(
 			tables,
+			schema,
 			schema.GO.Dest,
 			schema.GO.Package,
 			schema.GO.EmitJsonTags)
@@ -466,6 +469,7 @@ func (pcg *PgCodeGenerator) generateView(
 
 func (pcg *PgCodeGenerator) generateCodeForTables(
 	tables []pgTable,
+	schema ConfigSchema,
 	rootDirectory string,
 	packageName string,
 	emitJsonTags bool,
@@ -481,6 +485,11 @@ func (pcg *PgCodeGenerator) generateCodeForTables(
 	}
 
 	for _, table := range tables {
+		if schema.ShouldIgnore(table.Name) {
+			log.Printf("- Ignored code generation for %s [%s]\n", table.Kind, table.Name)
+			continue
+		}
+
 		var err error
 		switch table.Kind {
 		case _table:

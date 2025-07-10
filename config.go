@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 )
 
 type ConfigSchemaGO struct {
@@ -27,7 +29,9 @@ func (csg *ConfigSchemaGO) Validate(name string) error {
 }
 
 type ConfigSchema struct {
-	GO *ConfigSchemaGO `json:"go,omitempty"`
+	IncludeViews bool            `json:"include_views,omitempty"`
+	Ignore       []string        `json:"ignore,omitempty"`
+	GO           *ConfigSchemaGO `json:"go,omitempty"`
 }
 
 func (cs *ConfigSchema) Validate(name string) error {
@@ -40,6 +44,16 @@ func (cs *ConfigSchema) Validate(name string) error {
 	}
 
 	return nil
+}
+
+func (cs *ConfigSchema) ShouldIgnore(objectName string) bool {
+	if len(cs.Ignore) == 0 {
+		return false
+	}
+
+	return slices.ContainsFunc(cs.Ignore, func(str string) bool {
+		return strings.ToLower(objectName) == strings.ToLower(str)
+	})
 }
 
 type Config struct {
