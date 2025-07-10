@@ -17,11 +17,21 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-//go:embed templates/go/dao.txt
-var _daoTemplate string
+var (
+	//go:embed templates/go/dao.txt
+	_daoTemplate string
 
-//go:embed templates/go/common.txt
-var _commonTemplate string
+	//go:embed templates/go/common.txt
+	_commonTemplate string
+
+	//go:embed templates/go/view.txt
+	_viewTemplate string
+)
+
+const (
+	_table = "table"
+	_view  = "view"
+)
 
 type pgColumn struct {
 	Name         string `json:"name"`
@@ -45,11 +55,12 @@ func (c *pgColumn) jsonTags() string {
 }
 
 type pgTable struct {
+	Kind    string     `json:"kind,omitempty"`
 	Name    string     `json:"name,omitempty"`
 	Columns []pgColumn `json:"columns,omitempty"`
 }
 
-func (t *pgTable) generateCode(packageName string, emitJsonTags bool) ([]byte, error) {
+func (t *pgTable) generateDAOCode(packageName string, emitJsonTags bool) ([]byte, error) {
 	tableReplacer := strings.NewReplacer(
 		"{goPackageName}", packageName,
 		"{goEntityName}", t.entityName(),
@@ -73,6 +84,32 @@ func (t *pgTable) generateCode(packageName string, emitJsonTags bool) ([]byte, e
 	}
 
 	return tableFormattedCode, nil
+}
+
+func (t *pgTable) generateViewCode(packageName string, emitJsonTags bool) ([]byte, error) {
+	viewReplacer := strings.NewReplacer(
+		"{goPackageName}", packageName,
+		"{goEntityName}", t.entityName(),
+		"{goEntityFields}", t.goEntityFields(emitJsonTags),
+		"{goSelectOneScanFields}", t.goSelectOneScanFields(),
+		"{goSelectManyScanFields}", t.goSelectManyScanFields(),
+		"{goInsertValues}", t.goInsertValues(),
+		"{goUpdateValues}", t.goInsertValues(),
+		"{sqlSelectFields}", t.sqlSelectFields(),
+		"{sqlTableName}", t.sqlTableName(),
+		"{sqlPrimaryKeyColumn}", t.sqlPrimaryKey(),
+		"{sqlUpdatePlaceholders}", t.sqlUpdatePlaceholders(),
+		"{sqlInsertFields}", t.sqlInsertFields(),
+		"{sqlInsertPlaceholders}", t.sqlInsertPlaceholders(),
+	)
+
+	viewRawCode := viewReplacer.Replace(_viewTemplate)
+	viewFormattedCode, err := format.Source([]byte(viewRawCode))
+	if err != nil {
+		return nil, err
+	}
+
+	return viewFormattedCode, nil
 }
 
 func (t *pgTable) entityName() string {
@@ -275,6 +312,15 @@ func (pcg *PgCodeGenerator) Generate() error {
 			return err
 		}
 
+		views, err := pcg.getPgViews(schemaName)
+		if err != nil {
+			return err
+		}
+
+		for _, view := range views {
+			tables = append(tables, view)
+		}
+
 		err = pcg.generateCodeForTables(
 			tables,
 			schema.GO.Dest,
@@ -344,6 +390,7 @@ func (pcg *PgCodeGenerator) getPgTables(schema string) ([]pgTable, error) {
 			return nil, err
 		}
 
+		table.Kind = _table
 		tables = append(tables, table)
 	}
 
@@ -367,13 +414,63 @@ func (pcg *PgCodeGenerator) generateCommonCode(rootDirectory string, packageName
 	return nil
 }
 
+func (pcg *PgCodeGenerator) generateDAO(
+	table pgTable,
+	rootDirectory string,
+	packageName string,
+	emitJsonTags bool,
+) error {
+	if table.Kind != _table {
+		return nil
+	}
+
+	code, err := table.generateDAOCode(packageName, emitJsonTags)
+	if err != nil {
+		return fmt.Errorf("failed to generate code for table [%s], got error [%s]", table.Name, err.Error())
+	}
+
+	filepath := fmt.Sprintf("%s/%s_dao.go", rootDirectory, table.FileName())
+	if err := pcg.writeToFile(filepath, code); err != nil {
+		return fmt.Errorf("failed to write file [%s], got error [%s]", filepath, err.Error())
+	}
+
+	log.Printf("- Generated [%s] for table [%s]\n", filepath, table.Name)
+
+	return nil
+}
+
+func (pcg *PgCodeGenerator) generateView(
+	table pgTable,
+	rootDirectory string,
+	packageName string,
+	emitJsonTags bool,
+) error {
+	if table.Kind != _view {
+		return nil
+	}
+
+	code, err := table.generateViewCode(packageName, emitJsonTags)
+	if err != nil {
+		return fmt.Errorf("failed to generate code for view [%s], got error [%s]", table.Name, err.Error())
+	}
+
+	filepath := fmt.Sprintf("%s/%s_view.go", rootDirectory, table.FileName())
+	if err := pcg.writeToFile(filepath, code); err != nil {
+		return fmt.Errorf("failed to write file [%s], got error [%s]", filepath, err.Error())
+	}
+
+	log.Printf("- Generated [%s] for view [%s]\n", filepath, table.Name)
+
+	return nil
+}
+
 func (pcg *PgCodeGenerator) generateCodeForTables(
 	tables []pgTable,
 	rootDirectory string,
 	packageName string,
 	emitJsonTags bool,
 ) error {
-	log.Printf("Generating code for tables")
+	log.Printf("Generating code for tables and views")
 
 	if err := os.MkdirAll(rootDirectory, 0777); err != nil {
 		return fmt.Errorf("failed to create root directory [%s], got error [%s]", rootDirectory, err.Error())
@@ -384,17 +481,18 @@ func (pcg *PgCodeGenerator) generateCodeForTables(
 	}
 
 	for _, table := range tables {
-		code, err := table.generateCode(packageName, emitJsonTags)
+		var err error
+		switch table.Kind {
+		case _table:
+			err = pcg.generateDAO(table, rootDirectory, packageName, emitJsonTags)
+
+		case _view:
+			err = pcg.generateView(table, rootDirectory, packageName, emitJsonTags)
+		}
+
 		if err != nil {
-			return fmt.Errorf("failed to generate code for table [%s], got error [%s]", table.Name, err.Error())
+			return err
 		}
-
-		filepath := fmt.Sprintf("%s/%s_dao.go", rootDirectory, table.FileName())
-		if err := pcg.writeToFile(filepath, code); err != nil {
-			return fmt.Errorf("failed to write file [%s], got error [%s]", filepath, err.Error())
-		}
-
-		log.Printf("- Generated [%s] for table [%s]\n", filepath, table.Name)
 	}
 
 	return nil
@@ -412,4 +510,64 @@ func (pcg *PgCodeGenerator) writeToFile(filepath string, data []byte) error {
 	}
 
 	return dest.Sync()
+}
+
+func (pcg *PgCodeGenerator) getPgViews(schema string) ([]pgTable, error) {
+	const query = `
+	SELECT
+		v.table_name as name,
+		json_agg(json_build_object(
+			'name', a.attname,
+			'sql_data_type', t.typname,
+			'go_data_type', (CASE
+				WHEN UPPER(t.typname) = 'UUID' THEN 'uuid.UUID'
+				WHEN UPPER(t.typname) IN ('VARCHAR', 'TEXT') THEN 'string'
+				WHEN UPPER(t.typname) IN ('TIMESTAMP', 'DATE', 'DATETIME') THEN 'time.Time'
+				WHEN UPPER(t.typname) IN ('INT4', 'INTEGER', 'BIGINT', 'SMALLINT') THEN 'int64'
+				WHEN UPPER(t.typname) IN ('DECIMAL', 'FLOAT', 'DOUBLE PRECISION') THEN 'float64'
+				WHEN UPPER(t.typname) = 'BOOLEAN' THEN 'bool'
+				ELSE 'any'
+			END),
+			'nullable', false,
+			'is_primary_key', false
+		)) as columns
+	FROM
+		information_schema.views v
+	INNER JOIN pg_class c ON
+		c.relname = v.table_name
+	INNER JOIN pg_attribute a ON
+		a.attrelid = c.oid
+	INNER JOIN pg_type t ON
+		t.oid = a.atttypid
+	WHERE
+		c.relkind = 'v'
+		AND table_schema = $1
+	GROUP BY
+		v.table_name;
+	`
+
+	rows, err := pcg.db.Query(query, schema)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var views []pgTable
+	for rows.Next() {
+		var view pgTable
+		var columnsJson []byte
+
+		if err := rows.Scan(&view.Name, &columnsJson); err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal(columnsJson, &view.Columns); err != nil {
+			return nil, err
+		}
+
+		view.Kind = _view
+		views = append(views, view)
+	}
+
+	return views, nil
 }

@@ -12,6 +12,16 @@ CREATE TABLE IF NOT EXISTS "projects" (
     "tier" project_tier NOT NULL DEFAULT 'free'
 );
 
+CREATE OR REPLACE VIEW "v_free_projects" AS
+SELECT
+    "id",
+    "name",
+    "description" AS "desc"
+FROM
+    "projects"
+WHERE
+    "tier" = 'free';
+
 INSERT INTO projects (
     name,
     description,
