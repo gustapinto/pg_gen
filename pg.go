@@ -7,6 +7,7 @@ import (
 	"go/format"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -18,8 +19,8 @@ import (
 )
 
 var (
-	//go:embed templates/go/dao.txt
-	_daoTemplate string
+	//go:embed templates/go/table.txt
+	_tableTemplate string
 
 	//go:embed templates/go/common.txt
 	_commonTemplate string
@@ -29,16 +30,17 @@ var (
 )
 
 const (
-	_table = "table"
-	_view  = "view"
+	_table  = "table"
+	_view   = "view"
+	_commom = "commom"
 )
 
 type pgColumn struct {
-	Name         string `json:"name"`
-	SqlDataType  string `json:"sql_data_type"`
-	GoDataType   string `json:"go_data_type"`
-	Nullable     bool   `json:"nullable"`
-	IsPrimaryKey bool   `json:"is_primary_key"`
+	Name         string `json:"name,omitempty"`
+	SqlDataType  string `json:"sql_data_type,omitempty"`
+	GoDataType   string `json:"go_data_type,omitempty"`
+	Nullable     bool   `json:"nullable,omitempty"`
+	IsPrimaryKey bool   `json:"is_primary_key,omitempty"`
 }
 
 func (c *pgColumn) goName() string {
@@ -60,8 +62,8 @@ type pgTable struct {
 	Columns []pgColumn `json:"columns,omitempty"`
 }
 
-func (t *pgTable) generateDAOCode(packageName string, emitJsonTags bool) ([]byte, error) {
-	tableReplacer := strings.NewReplacer(
+func (t *pgTable) replacer(packageName string, emitJsonTags bool) *strings.Replacer {
+	return strings.NewReplacer(
 		"{goPackageName}", packageName,
 		"{goEntityName}", t.entityName(),
 		"{goEntityFields}", t.goEntityFields(emitJsonTags),
@@ -76,48 +78,30 @@ func (t *pgTable) generateDAOCode(packageName string, emitJsonTags bool) ([]byte
 		"{sqlInsertFields}", t.sqlInsertFields(),
 		"{sqlInsertPlaceholders}", t.sqlInsertPlaceholders(),
 	)
-
-	tableRawCode := tableReplacer.Replace(_daoTemplate)
-	tableFormattedCode, err := format.Source([]byte(tableRawCode))
-	if err != nil {
-		return nil, err
-	}
-
-	return tableFormattedCode, nil
 }
 
-func (t *pgTable) generateViewCode(packageName string, emitJsonTags bool) ([]byte, error) {
-	viewReplacer := strings.NewReplacer(
-		"{goPackageName}", packageName,
-		"{goEntityName}", t.entityName(),
-		"{goEntityFields}", t.goEntityFields(emitJsonTags),
-		"{goSelectOneScanFields}", t.goSelectOneScanFields(),
-		"{goSelectManyScanFields}", t.goSelectManyScanFields(),
-		"{goInsertValues}", t.goInsertValues(),
-		"{goUpdateValues}", t.goInsertValues(),
-		"{sqlSelectFields}", t.sqlSelectFields(),
-		"{sqlTableName}", t.sqlTableName(),
-		"{sqlPrimaryKeyColumn}", t.sqlPrimaryKey(),
-		"{sqlUpdatePlaceholders}", t.sqlUpdatePlaceholders(),
-		"{sqlInsertFields}", t.sqlInsertFields(),
-		"{sqlInsertPlaceholders}", t.sqlInsertPlaceholders(),
-	)
-
-	viewRawCode := viewReplacer.Replace(_viewTemplate)
-	viewFormattedCode, err := format.Source([]byte(viewRawCode))
+func (t *pgTable) generateGoCode(packageName, template string, emitJsonTags bool) ([]byte, error) {
+	rawCode := t.replacer(packageName, emitJsonTags).Replace(template)
+	formattedCode, err := format.Source([]byte(rawCode))
 	if err != nil {
 		return nil, err
 	}
 
-	return viewFormattedCode, nil
+	return formattedCode, nil
 }
 
 func (t *pgTable) entityName() string {
 	return strcase.ToCamel(t.Name)
 }
 
-func (t *pgTable) FileName() string {
-	return strcase.ToSnake(t.Name)
+func (t *pgTable) goFilepath(rootDirectory string) string {
+	var sb strings.Builder
+	sb.WriteString(rootDirectory)
+	sb.WriteString("/")
+	sb.WriteString(strcase.ToSnake(t.Name))
+	sb.WriteString(".go")
+
+	return filepath.Clean(sb.String())
 }
 
 func (t *pgTable) goEntityFields(emitJsonTags bool) string {
@@ -175,20 +159,7 @@ func (t *pgTable) sqlSelectFields() string {
 }
 
 func (t *pgTable) sqlInsertFields() string {
-	var sb strings.Builder
-
-	colSize := len(t.Columns) - 1
-	for i, col := range t.Columns {
-		sb.WriteString("\"")
-		sb.WriteString(col.Name)
-		sb.WriteString("\"")
-
-		if i < colSize {
-			sb.WriteString(", ")
-		}
-	}
-
-	return sb.String()
+	return t.sqlSelectFields()
 }
 
 func (t *pgTable) goSelectOneScanFields() string {
@@ -337,6 +308,27 @@ func (pcg *PgCodeGenerator) Generate() error {
 	return nil
 }
 
+func (pcg *PgCodeGenerator) pgTableFromRows(rows *sql.Rows, kind string) ([]pgTable, error) {
+	var pgTables []pgTable
+	for rows.Next() {
+		var pgTable pgTable
+		var columnsJson []byte
+
+		if err := rows.Scan(&pgTable.Name, &columnsJson); err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal(columnsJson, &pgTable.Columns); err != nil {
+			return nil, err
+		}
+
+		pgTable.Kind = kind
+		pgTables = append(pgTables, pgTable)
+	}
+
+	return pgTables, nil
+}
+
 func (pcg *PgCodeGenerator) getPgTables(schema string) ([]pgTable, error) {
 	const query = `
 	SELECT
@@ -380,145 +372,12 @@ func (pcg *PgCodeGenerator) getPgTables(schema string) ([]pgTable, error) {
 	}
 	defer rows.Close()
 
-	var tables []pgTable
-	for rows.Next() {
-		var table pgTable
-		var columnsJson []byte
-
-		if err := rows.Scan(&table.Name, &columnsJson); err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(columnsJson, &table.Columns); err != nil {
-			return nil, err
-		}
-
-		table.Kind = _table
-		tables = append(tables, table)
+	tables, err := pcg.pgTableFromRows(rows, _table)
+	if err != nil {
+		return nil, err
 	}
 
 	return tables, nil
-}
-
-func (pcg *PgCodeGenerator) generateCommonCode(rootDirectory string, packageName string) error {
-	replacer := strings.NewReplacer("{goPackageName}", packageName)
-
-	rawCode := replacer.Replace(_commonTemplate)
-	formattedCode, err := format.Source([]byte(rawCode))
-	if err != nil {
-		return fmt.Errorf("failed to generate commoon code for package [%s], got error [%s]", packageName, err.Error())
-	}
-
-	commonFilepath := fmt.Sprintf("%s/%s.go", rootDirectory, packageName)
-	if err := pcg.writeToFile(commonFilepath, formattedCode); err != nil {
-		return fmt.Errorf("failed to write file [%s], got error [%s]", commonFilepath, err.Error())
-	}
-
-	return nil
-}
-
-func (pcg *PgCodeGenerator) generateDAO(
-	table pgTable,
-	rootDirectory string,
-	packageName string,
-	emitJsonTags bool,
-) error {
-	if table.Kind != _table {
-		return nil
-	}
-
-	code, err := table.generateDAOCode(packageName, emitJsonTags)
-	if err != nil {
-		return fmt.Errorf("failed to generate code for table [%s], got error [%s]", table.Name, err.Error())
-	}
-
-	filepath := fmt.Sprintf("%s/%s_dao.go", rootDirectory, table.FileName())
-	if err := pcg.writeToFile(filepath, code); err != nil {
-		return fmt.Errorf("failed to write file [%s], got error [%s]", filepath, err.Error())
-	}
-
-	log.Printf("- Generated [%s] for table [%s]\n", filepath, table.Name)
-
-	return nil
-}
-
-func (pcg *PgCodeGenerator) generateView(
-	table pgTable,
-	rootDirectory string,
-	packageName string,
-	emitJsonTags bool,
-) error {
-	if table.Kind != _view {
-		return nil
-	}
-
-	code, err := table.generateViewCode(packageName, emitJsonTags)
-	if err != nil {
-		return fmt.Errorf("failed to generate code for view [%s], got error [%s]", table.Name, err.Error())
-	}
-
-	filepath := fmt.Sprintf("%s/%s_view.go", rootDirectory, table.FileName())
-	if err := pcg.writeToFile(filepath, code); err != nil {
-		return fmt.Errorf("failed to write file [%s], got error [%s]", filepath, err.Error())
-	}
-
-	log.Printf("- Generated [%s] for view [%s]\n", filepath, table.Name)
-
-	return nil
-}
-
-func (pcg *PgCodeGenerator) generateCodeForTables(
-	tables []pgTable,
-	schema ConfigSchema,
-	rootDirectory string,
-	packageName string,
-	emitJsonTags bool,
-) error {
-	log.Printf("Generating code for tables and views")
-
-	if err := os.MkdirAll(rootDirectory, 0777); err != nil {
-		return fmt.Errorf("failed to create root directory [%s], got error [%s]", rootDirectory, err.Error())
-	}
-
-	if err := pcg.generateCommonCode(rootDirectory, packageName); err != nil {
-		return err
-	}
-
-	for _, table := range tables {
-		if schema.ShouldIgnore(table.Name) {
-			log.Printf("- Ignored code generation for %s [%s]\n", table.Kind, table.Name)
-			continue
-		}
-
-		var err error
-		switch table.Kind {
-		case _table:
-			err = pcg.generateDAO(table, rootDirectory, packageName, emitJsonTags)
-
-		case _view:
-			err = pcg.generateView(table, rootDirectory, packageName, emitJsonTags)
-		}
-
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (pcg *PgCodeGenerator) writeToFile(filepath string, data []byte) error {
-	dest, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer dest.Close()
-
-	if _, err := dest.Write(data); err != nil {
-		return err
-	}
-
-	return dest.Sync()
 }
 
 func (pcg *PgCodeGenerator) getPgViews(schema string) ([]pgTable, error) {
@@ -561,22 +420,108 @@ func (pcg *PgCodeGenerator) getPgViews(schema string) ([]pgTable, error) {
 	}
 	defer rows.Close()
 
-	var views []pgTable
-	for rows.Next() {
-		var view pgTable
-		var columnsJson []byte
-
-		if err := rows.Scan(&view.Name, &columnsJson); err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(columnsJson, &view.Columns); err != nil {
-			return nil, err
-		}
-
-		view.Kind = _view
-		views = append(views, view)
+	views, err := pcg.pgTableFromRows(rows, _view)
+	if err != nil {
+		return nil, err
 	}
 
 	return views, nil
+}
+
+func (pcg *PgCodeGenerator) commomFilepath(rootDirectory, packageName string) string {
+	var sb strings.Builder
+	sb.WriteString(rootDirectory)
+	sb.WriteString("/")
+	sb.WriteString(packageName)
+	sb.WriteString(".go")
+
+	return filepath.Clean(sb.String())
+}
+
+func (pcg *PgCodeGenerator) generateGoCommonFile(rootDirectory, packageName string) error {
+	rawCode := strings.ReplaceAll(_commonTemplate, "{goPackageName}", packageName)
+	formattedCode, err := format.Source([]byte(rawCode))
+	if err != nil {
+		return fmt.Errorf("failed to generate commoon code for package [%s], got error [%s]", packageName, err.Error())
+	}
+
+	path := pcg.commomFilepath(rootDirectory, packageName)
+	if err := pcg.writeToFile(path, formattedCode); err != nil {
+		return fmt.Errorf("failed to write file [%s], got error [%s]", path, err.Error())
+	}
+
+	return nil
+}
+
+func (pcg *PgCodeGenerator) generateGoFile(
+	table pgTable,
+	rootDirectory string,
+	packageName string,
+	emitJsonTags bool,
+) error {
+	template := _tableTemplate
+	if table.Kind == _view {
+		template = _viewTemplate
+	}
+
+	code, err := table.generateGoCode(packageName, template, emitJsonTags)
+	if err != nil {
+		return fmt.Errorf("failed to generate code for %s [%s], got error [%s]", table.Kind, table.Name, err.Error())
+	}
+
+	path := table.goFilepath(rootDirectory)
+	if err := pcg.writeToFile(path, code); err != nil {
+		return fmt.Errorf("failed to write file [%s], got error [%s]", path, err.Error())
+	}
+
+	log.Printf("- Generated [%s] for %s [%s]\n", path, table.Kind, table.Name)
+
+	return nil
+}
+
+func (pcg *PgCodeGenerator) generateCodeForTables(
+	tables []pgTable,
+	schema ConfigSchema,
+	rootDirectory string,
+	packageName string,
+	emitJsonTags bool,
+) error {
+	log.Printf("Generating code for tables and views")
+
+	if err := os.MkdirAll(rootDirectory, 0777); err != nil {
+		return fmt.Errorf("failed to create root directory [%s], got error [%s]", rootDirectory, err.Error())
+	}
+
+	if schema.GO != nil {
+		if err := pcg.generateGoCommonFile(rootDirectory, packageName); err != nil {
+			return err
+		}
+
+		for _, table := range tables {
+			if schema.ShouldIgnore(table.Name) {
+				log.Printf("- Ignored code generation for %s [%s]\n", table.Kind, table.Name)
+				continue
+			}
+
+			if err := pcg.generateGoFile(table, rootDirectory, packageName, emitJsonTags); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (pcg *PgCodeGenerator) writeToFile(filepath string, data []byte) error {
+	dest, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer dest.Close()
+
+	if _, err := dest.Write(data); err != nil {
+		return err
+	}
+
+	return dest.Sync()
 }

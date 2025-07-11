@@ -17,14 +17,12 @@ type Projects struct {
 	Description *string    `json:"description"`
 }
 
-type ProjectsDAO struct{}
-
-func (ProjectsDAO) Count(ctx context.Context, db *sql.DB, opts *SelectOptions) (uint, error) {
+func (self *Projects) Count(ctx context.Context, db *sql.DB, opts *SelectOptions) (uint, error) {
 	query := `SELECT count(*) FROM "projects"`
 
 	var values []any
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}
@@ -47,12 +45,12 @@ func (ProjectsDAO) Count(ctx context.Context, db *sql.DB, opts *SelectOptions) (
 	return count, nil
 }
 
-func (ProjectsDAO) Select(ctx context.Context, db *sql.DB, opts *SelectOptions) (*SelectResult[Projects], error) {
+func (self *Projects) Select(ctx context.Context, db *sql.DB, opts *SelectOptions) (*SelectResult[Projects], error) {
 	query := `SELECT "id", "created_at", "tier", "name", "description" FROM "projects"`
 
 	var values []any
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}
@@ -70,7 +68,7 @@ func (ProjectsDAO) Select(ctx context.Context, db *sql.DB, opts *SelectOptions) 
 		}
 	}
 
-	total, err := ProjectsDAO{}.Count(ctx, db, opts)
+	total, err := self.Count(ctx, db, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +98,13 @@ func (ProjectsDAO) Select(ctx context.Context, db *sql.DB, opts *SelectOptions) 
 	return result, nil
 }
 
-func (ProjectsDAO) Insert(ctx context.Context, tx *sql.Tx, values Projects) error {
+func (self *Projects) Insert(ctx context.Context, db *sql.DB, values Projects) error {
+	return Transaction(db, func(tx *sql.Tx) error {
+		return self.InsertTx(ctx, tx, values)
+	})
+}
+
+func (self *Projects) InsertTx(ctx context.Context, tx *sql.Tx, values Projects) error {
 	const query = `INSERT INTO "projects" ("id", "created_at", "tier", "name", "description") VALUES ($1::UUID, $2::TIMESTAMP, $3::PROJECT_TIER, $4::VARCHAR, $5::VARCHAR)`
 
 	if _, err := tx.ExecContext(ctx, query, values.Id, values.CreatedAt, values.Tier, values.Name, values.Description); err != nil {
@@ -110,12 +114,18 @@ func (ProjectsDAO) Insert(ctx context.Context, tx *sql.Tx, values Projects) erro
 	return nil
 }
 
-func (ProjectsDAO) Update(ctx context.Context, tx *sql.Tx, values Projects, opts *UpdateOptions) error {
+func (self *Projects) Update(ctx context.Context, db *sql.DB, values Projects, opts *UpdateOptions) error {
+	return Transaction(db, func(tx *sql.Tx) error {
+		return self.UpdateTx(ctx, tx, values, opts)
+	})
+}
+
+func (self *Projects) UpdateTx(ctx context.Context, tx *sql.Tx, values Projects, opts *UpdateOptions) error {
 	query := `UPDATE "projects" SET "created_at" = $2::TIMESTAMP, "tier" = $3::PROJECT_TIER, "name" = $4::VARCHAR, "description" = $5::VARCHAR`
 
 	queryValues := []any{values.Id, values.CreatedAt, values.Tier, values.Name, values.Description}
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}
@@ -132,12 +142,18 @@ func (ProjectsDAO) Update(ctx context.Context, tx *sql.Tx, values Projects, opts
 	return nil
 }
 
-func (ProjectsDAO) Delete(ctx context.Context, tx *sql.Tx, opts *DeleteOptions) error {
+func (self *Projects) Delete(ctx context.Context, db *sql.DB, opts *DeleteOptions) error {
+	return Transaction(db, func(tx *sql.Tx) error {
+		return self.DeleteTx(ctx, tx, opts)
+	})
+}
+
+func (self *Projects) DeleteTx(ctx context.Context, tx *sql.Tx, opts *DeleteOptions) error {
 	query := `DELETE FROM "projects"`
 
 	var values []any
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}

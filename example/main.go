@@ -1,4 +1,4 @@
-//go:generate go run github.com/gustapinto/pg_gen@v0.2.0 -config=./example.cfg.json
+//go:generate go run github.com/gustapinto/pg_gen@latest -config=./example.cfg.json
 package main
 
 import (
@@ -22,11 +22,14 @@ func main() {
 	}
 	defer db.Close()
 
-	dao := gen.ProjectsDAO{}
-	res, err := dao.Select(context.Background(), db, &gen.SelectOptions{
-		OrderBy: []gen.OrderBy{
-			gen.NewOrderBy("tier", "desc"),
-		},
+	projects := gen.Projects{}
+	res, err := projects.Select(context.Background(), db, &gen.SelectOptions{
+		Where: gen.Where(
+			gen.NewFilter("tier", "!=", "free"),
+		),
+		OrderBy: gen.OrderBy(
+			gen.NewDirection("name", "asc"),
+		),
 	})
 	if err != nil {
 		panic(err)

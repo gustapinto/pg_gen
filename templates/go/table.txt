@@ -13,14 +13,12 @@ type {goEntityName} struct {
 	{goEntityFields}
 }
 
-type {goEntityName}DAO struct{}
-
-func ({goEntityName}DAO) Count(ctx context.Context, db *sql.DB, opts *SelectOptions) (uint, error) {
+func (self *{goEntityName}) Count(ctx context.Context, db *sql.DB, opts *SelectOptions) (uint, error) {
 	query := `SELECT count(*) FROM "{sqlTableName}"`
 
 	var values []any
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}
@@ -43,12 +41,12 @@ func ({goEntityName}DAO) Count(ctx context.Context, db *sql.DB, opts *SelectOpti
 	return count, nil
 }
 
-func ({goEntityName}DAO) Select(ctx context.Context, db *sql.DB, opts *SelectOptions) (*SelectResult[{goEntityName}], error) {
+func (self *{goEntityName}) Select(ctx context.Context, db *sql.DB, opts *SelectOptions) (*SelectResult[{goEntityName}], error) {
 	query := `SELECT {sqlSelectFields} FROM "{sqlTableName}"`
 
 	var values []any
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}
@@ -66,7 +64,7 @@ func ({goEntityName}DAO) Select(ctx context.Context, db *sql.DB, opts *SelectOpt
 		}
 	}
 
-	total, err := {goEntityName}DAO{}.Count(ctx, db, opts)
+	total, err := self.Count(ctx, db, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +94,13 @@ func ({goEntityName}DAO) Select(ctx context.Context, db *sql.DB, opts *SelectOpt
 	return result, nil
 }
 
-func ({goEntityName}DAO) Insert(ctx context.Context, tx *sql.Tx, values {goEntityName}) error {
+func (self *{goEntityName}) Insert(ctx context.Context, db *sql.DB, values {goEntityName}) error {
+	return Transaction(db, func(tx *sql.Tx) error {
+		return self.InsertTx(ctx, tx, values)
+	})
+}
+
+func (self *{goEntityName}) InsertTx(ctx context.Context, tx *sql.Tx, values {goEntityName}) error {
 	const query = `INSERT INTO "{sqlTableName}" ({sqlInsertFields}) VALUES ({sqlInsertPlaceholders})`
 
 	if _, err := tx.ExecContext(ctx, query, {goInsertValues}); err != nil {
@@ -106,12 +110,18 @@ func ({goEntityName}DAO) Insert(ctx context.Context, tx *sql.Tx, values {goEntit
 	return nil
 }
 
-func ({goEntityName}DAO) Update(ctx context.Context, tx *sql.Tx, values {goEntityName}, opts *UpdateOptions) error {
+func (self *{goEntityName}) Update(ctx context.Context, db *sql.DB, values {goEntityName}, opts *UpdateOptions) error {
+	return Transaction(db, func(tx *sql.Tx) error {
+		return self.UpdateTx(ctx, tx, values, opts)
+	})
+}
+
+func (self *{goEntityName}) UpdateTx(ctx context.Context, tx *sql.Tx, values {goEntityName}, opts *UpdateOptions) error {
 	query := `UPDATE "{sqlTableName}" SET {sqlUpdatePlaceholders}`
 
 	queryValues := []any{{goUpdateValues}}
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}
@@ -128,12 +138,18 @@ func ({goEntityName}DAO) Update(ctx context.Context, tx *sql.Tx, values {goEntit
 	return nil
 }
 
-func ({goEntityName}DAO) Delete(ctx context.Context, tx *sql.Tx, opts *DeleteOptions) error {
+func (self *{goEntityName}) Delete(ctx context.Context, db *sql.DB, opts *DeleteOptions) error {
+	return Transaction(db, func(tx *sql.Tx) error {
+		return self.DeleteTx(ctx, tx, opts)
+	})
+}
+
+func (self *{goEntityName}) DeleteTx(ctx context.Context, tx *sql.Tx, opts *DeleteOptions) error {
 	query := `DELETE FROM "{sqlTableName}"`
 
 	var values []any
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}

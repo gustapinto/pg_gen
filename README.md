@@ -51,3 +51,10 @@ func main() {
     // Your code
 }
 ```
+
+## API status
+
+The generated code API uses a *DAO*/*Active Record* like struct and method organization, example usage of this can be found [here](https://github.com/gustapinto/pg_gen/tree/main/example).
+
+Currently the generated code API is not set on stone yet, so we highly recommend you to use explicit versions of pg_gen when generating code (ex: `go run github.com/gustapinto/pg_gen@X.Y.Z` instead of `go run github.com/gustapinto/pg_gen@latest`).
+

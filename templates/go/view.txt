@@ -12,14 +12,12 @@ type {goEntityName} struct {
 	{goEntityFields}
 }
 
-type {goEntityName}View struct{}
-
-func ({goEntityName}View) Count(ctx context.Context, db *sql.DB, opts *SelectOptions) (uint, error) {
+func (self *{goEntityName}) Count(ctx context.Context, db *sql.DB, opts *SelectOptions) (uint, error) {
 	query := `SELECT count(*) FROM "{sqlTableName}"`
 
 	var values []any
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}
@@ -42,12 +40,12 @@ func ({goEntityName}View) Count(ctx context.Context, db *sql.DB, opts *SelectOpt
 	return count, nil
 }
 
-func ({goEntityName}View) Select(ctx context.Context, db *sql.DB, opts *SelectOptions) (*SelectResult[{goEntityName}], error) {
+func (self *{goEntityName}) Select(ctx context.Context, db *sql.DB, opts *SelectOptions) (*SelectResult[{goEntityName}], error) {
 	query := `SELECT {sqlSelectFields} FROM "{sqlTableName}"`
 
 	var values []any
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}
@@ -65,7 +63,7 @@ func ({goEntityName}View) Select(ctx context.Context, db *sql.DB, opts *SelectOp
 		}
 	}
 
-	total, err := {goEntityName}View{}.Count(ctx, db, opts)
+	total, err := self.Count(ctx, db, opts)
 	if err != nil {
 		return nil, err
 	}

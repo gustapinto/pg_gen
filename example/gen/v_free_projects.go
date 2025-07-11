@@ -14,14 +14,12 @@ type VFreeProjects struct {
 	Desc string    `json:"desc"`
 }
 
-type VFreeProjectsView struct{}
-
-func (VFreeProjectsView) Count(ctx context.Context, db *sql.DB, opts *SelectOptions) (uint, error) {
+func (self *VFreeProjects) Count(ctx context.Context, db *sql.DB, opts *SelectOptions) (uint, error) {
 	query := `SELECT count(*) FROM "v_free_projects"`
 
 	var values []any
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}
@@ -44,12 +42,12 @@ func (VFreeProjectsView) Count(ctx context.Context, db *sql.DB, opts *SelectOpti
 	return count, nil
 }
 
-func (VFreeProjectsView) Select(ctx context.Context, db *sql.DB, opts *SelectOptions) (*SelectResult[VFreeProjects], error) {
+func (self *VFreeProjects) Select(ctx context.Context, db *sql.DB, opts *SelectOptions) (*SelectResult[VFreeProjects], error) {
 	query := `SELECT "id", "name", "desc" FROM "v_free_projects"`
 
 	var values []any
 	if opts != nil {
-		filterPart, v := opts.toWherePartAndValues()
+		filterPart, v := filtersToQueryPart(opts.Where)
 		if filterPart != "" {
 			query += filterPart
 		}
@@ -67,7 +65,7 @@ func (VFreeProjectsView) Select(ctx context.Context, db *sql.DB, opts *SelectOpt
 		}
 	}
 
-	total, err := VFreeProjectsView{}.Count(ctx, db, opts)
+	total, err := self.Count(ctx, db, opts)
 	if err != nil {
 		return nil, err
 	}

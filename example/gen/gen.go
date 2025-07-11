@@ -2,6 +2,7 @@
 package gen
 
 import (
+	"database/sql"
 	"strconv"
 	"strings"
 )
@@ -20,7 +21,33 @@ func NewFilter(column, operand string, value any) Filter {
 	}
 }
 
-type OrderBy struct {
+func filtersToQueryPart(filters []Filter) (string, []any) {
+	if len(filters) == 0 {
+		return "", nil
+	}
+
+	var queryBuilder strings.Builder
+	queryBuilder.WriteString(" WHERE ")
+
+	var values []any
+	for i, filter := range filters {
+		queryBuilder.WriteString(filter.Column)
+		queryBuilder.WriteString(" ")
+		queryBuilder.WriteString(filter.Operand)
+		queryBuilder.WriteString(" $")
+		queryBuilder.WriteString(strconv.Itoa(i + 1))
+
+		if i < (len(filters) - 1) {
+			queryBuilder.WriteString(" AND ")
+		}
+
+		values = append(values, filter.Value)
+	}
+
+	return queryBuilder.String(), values
+}
+
+type Direction struct {
 	Column    string
 	Direction string
 }
@@ -39,8 +66,8 @@ func (sr *SelectResult[T]) First() *T {
 	return &sr.Rows[0]
 }
 
-func NewOrderBy(column, direction string) OrderBy {
-	return OrderBy{
+func NewDirection(column, direction string) Direction {
+	return Direction{
 		Column:    column,
 		Direction: direction,
 	}
@@ -50,36 +77,7 @@ type SelectOptions struct {
 	Limit   uint
 	Offset  uint
 	Where   []Filter
-	OrderBy []OrderBy
-}
-
-func (so *SelectOptions) toWherePartAndValues() (string, []any) {
-	if so.Where == nil {
-		return "", nil
-	}
-
-	var queryBuilder strings.Builder
-	var values []any
-
-	if len(so.Where) > 0 {
-		queryBuilder.WriteString(" WHERE ")
-
-		for i, filter := range so.Where {
-			queryBuilder.WriteString(filter.Column)
-			queryBuilder.WriteString(" ")
-			queryBuilder.WriteString(filter.Operand)
-			queryBuilder.WriteString(" $")
-			queryBuilder.WriteString(strconv.Itoa(i + 1))
-
-			if i < (len(so.Where) - 1) {
-				queryBuilder.WriteString(" AND ")
-			}
-
-			values = append(values, filter.Value)
-		}
-	}
-
-	return queryBuilder.String(), values
+	OrderBy []Direction
 }
 
 func (so *SelectOptions) toOrderByPart() string {
@@ -92,10 +90,10 @@ func (so *SelectOptions) toOrderByPart() string {
 	if len(so.OrderBy) > 0 {
 		queryBuilder.WriteString(" ORDER BY ")
 
-		for i, order := range so.OrderBy {
-			queryBuilder.WriteString(order.Column)
+		for i, direction := range so.OrderBy {
+			queryBuilder.WriteString(direction.Column)
 			queryBuilder.WriteString(" ")
-			queryBuilder.WriteString(order.Direction)
+			queryBuilder.WriteString(direction.Direction)
 
 			if i < (len(so.Where) - 1) {
 				queryBuilder.WriteString(", ")
@@ -128,64 +126,27 @@ type UpdateOptions struct {
 	Where []Filter
 }
 
-func (so *UpdateOptions) toWherePartAndValues() (string, []any) {
-	if so.Where == nil {
-		return "", nil
-	}
-
-	var queryBuilder strings.Builder
-	var values []any
-
-	if len(so.Where) > 0 {
-		queryBuilder.WriteString(" WHERE ")
-
-		for i, filter := range so.Where {
-			queryBuilder.WriteString(filter.Column)
-			queryBuilder.WriteString(" ")
-			queryBuilder.WriteString(filter.Operand)
-			queryBuilder.WriteString(" $")
-			queryBuilder.WriteString(strconv.Itoa(i + 1))
-
-			if i < (len(so.Where) - 1) {
-				queryBuilder.WriteString(" AND ")
-			}
-
-			values = append(values, filter.Value)
-		}
-	}
-
-	return queryBuilder.String(), values
-}
-
 type DeleteOptions struct {
 	Where []Filter
 }
 
-func (so *DeleteOptions) toWherePartAndValues() (string, []any) {
-	if so.Where == nil {
-		return "", nil
+func Where(filters ...Filter) []Filter {
+	return filters
+}
+
+func OrderBy(directions ...Direction) []Direction {
+	return directions
+}
+
+func Transaction(db *sql.DB, fn func(tx *sql.Tx) error) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
 	}
 
-	var queryBuilder strings.Builder
-	var values []any
-
-	if len(so.Where) > 0 {
-		queryBuilder.WriteString(" WHERE ")
-
-		for i, filter := range so.Where {
-			queryBuilder.WriteString(filter.Column)
-			queryBuilder.WriteString(" ")
-			queryBuilder.WriteString(filter.Operand)
-			queryBuilder.WriteString(" $")
-			queryBuilder.WriteString(strconv.Itoa(i + 1))
-
-			if i < (len(so.Where) - 1) {
-				queryBuilder.WriteString(" AND ")
-			}
-
-			values = append(values, filter.Value)
-		}
+	if err := fn(tx); err != nil {
+		return tx.Rollback()
 	}
 
-	return queryBuilder.String(), values
+	return tx.Commit()
 }
