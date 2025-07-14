@@ -7,34 +7,27 @@ Example usage of the generated code can be found [here](https://github.com/gusta
 ## Usage
 
 1. Create a configuration file in your project root. Example:
-```json5
-{
-  // The PostgreSQL database connection string
-  "dsn": "postgresql://myuser:mypassword@localhost:5432/mydb?sslmode=disable",
+```yaml
+# The PostgreSQL database connection string
+dsn: "postgresql://myuser:mypassword@localhost:5432/mydb?sslmode=disable"
 
-  // The database schemas that will be introspected for code generation
-  "schemas": {
-    "public": {
-      // If views should be included in code generation (Optional, default=false)
-      "include_views": true,
-      // Tables or views that should be ignored in code generation (Optional, default=null)
-      "ignore": [
-        "locked_table",
-        "super_secret_view"
-      ],
-      // Golang code generation specific stuff
-      "go": {
-        // The destination folder
-        "dest": "./gen",
-        // The generated code package name
-        "package": "gen",
-        // If the generated entities must include JSON tags (Optional, default=false)
-        "emit_json_tags": true
-      }
-    }
-  }
-}
-
+# The database schemas that will be introspected for code generation
+schemas:
+  public:
+    # If views should be included in code generation (Optional, default=false)
+    include_views: true
+    # Tables or views that should be ignored in code generation (Optional, default=null)
+    ignore:
+      - "locked_table"
+      - "super_secret_view"
+    # Golang code generation specific stuff
+    go:
+      # The destination folder
+      dest: "./gen"
+      # The generated code package name
+      package: "gen"
+      # If the generated entities must include JSON tags (Optional, default=false)
+      emit_json_tags: true
 ```
 2. Execute the generator
 ```bash

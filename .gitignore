@@ -27,9 +27,7 @@ go.work.sum
 
 # Custom
 __debug*
-*cfg.yaml
 bin/
 .obsidian/
 .idea/
-/*.json
 !example.cfg.json
