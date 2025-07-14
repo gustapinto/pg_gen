@@ -6,7 +6,7 @@ Example usage of the generated code can be found [here](https://github.com/gusta
 
 ## Usage
 
-1. Create a configuration file in your project root. Example:
+1. Create a configuration file in your project root, YAML and JSON formats are supported. Example:
 ```yaml
 # The PostgreSQL database connection string
 dsn: "postgresql://myuser:mypassword@localhost:5432/mydb?sslmode=disable"
@@ -31,13 +31,13 @@ schemas:
 ```
 2. Execute the generator
 ```bash
-go run github.com/gustapinto/pg_gen@latest -config=./example_config.json
+go run github.com/gustapinto/pg_gen@latest -config=./example_config.yaml
 ```
 3. All done! Your generated code is ready to be used
 
 You can also use the generator as a `go:generate` clause. Example:
 ```go
-//go:generate go run github.com/gustapinto/pg_gen@latest -config=./example_config.json
+//go:generate go run github.com/gustapinto/pg_gen@latest -config=./example_config.yaml
 package main
 
 func main() {
