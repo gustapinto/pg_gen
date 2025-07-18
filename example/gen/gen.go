@@ -66,6 +66,10 @@ func (sr *SelectResult[T]) First() *T {
 	return &sr.Rows[0]
 }
 
+func (sr *SelectResult[T]) IsEmpty() bool {
+	return len(sr.Rows) == 0
+}
+
 func NewDirection(column, direction string) Direction {
 	return Direction{
 		Column:    column,
